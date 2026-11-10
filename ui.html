@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>矢量九宫格</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+      font-size: 12px;
+      --bg: var(--figma-color-bg, #ffffff);
+      --well: var(--figma-color-bg-secondary, #f5f5f5);
+      --hover: var(--figma-color-bg-hover, #ededed);
+      --ink: var(--figma-color-text, #1d1f20);
+      --muted: var(--figma-color-text-secondary, #666666);
+      --border: var(--figma-color-border, #e5e5e5);
+      --control: var(--figma-color-border-strong, #c9c9c9);
+      --accent: var(--figma-color-text-brand, #1d5fbf);
+      --danger: var(--figma-color-text-danger, #b52620);
+      --inverse: var(--figma-color-bg, #ffffff);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; min-height: 100%; background: var(--bg); color: var(--ink); }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: default; opacity: .5; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    button, input { border-radius: 6px; }
+    button { border: 1px solid var(--control); background: var(--bg); min-height: 32px; padding: 6px 12px; }
+    button:hover:not(:disabled) { background: var(--hover); }
+    svg { display: block; flex: none; }
+    [hidden] { display: none !important; }
+    .app { max-width: 760px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .topbar, .section-heading, .source, .preview-toolbar, .footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    h1 { font-size: 16px; line-height: 24px; font-weight: 600; margin: 0; }
+    .plain { border-color: transparent; background: transparent; color: var(--muted); padding-left: 8px; padding-right: 8px; }
+    .plain:hover:not(:disabled) { color: var(--ink); }
+    .refresh { display: inline-flex; align-items: center; gap: 6px; }
+    .source { align-items: baseline; min-height: 20px; }
+    .source-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .source-size { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .editor { display: flex; flex-direction: column; gap: 12px; }
+    .preview-toolbar { min-height: 32px; }
+    .tabs { display: flex; gap: 16px; align-self: stretch; }
+    .tab { padding: 4px 0; border: 0; border-radius: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); min-height: 32px; }
+    .tab:hover:not(:disabled) { background: none; color: var(--ink); }
+    .tab[aria-selected="true"] { border-bottom-color: var(--ink); color: var(--ink); }
+    .zoom { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .well { position: relative; width: 100%; height: 254px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--well); }
+    body[data-mode="stretch"] .well { height: 210px; }
+    .stage { position: absolute; overflow: visible; touch-action: none; user-select: none; }
+    #sourceImage { display: block; width: 100%; height: 100%; pointer-events: none; }
+    .source-boundary { position: absolute; inset: 0; border: 1px solid var(--control); pointer-events: none; }
+    .guide { position: absolute; z-index: 3; margin: 0; padding: 0; min-height: 0; border: 0; border-radius: 0; background: transparent; color: var(--accent); touch-action: none; }
+    .guide:hover:not(:disabled) { background: transparent; }
+    .guide::before, .guide::after { content: ""; position: absolute; background: currentColor; pointer-events: none; }
+    .guide.vertical { width: 17px; top: -12px; bottom: -12px; transform: translateX(-50%); cursor: ew-resize; }
+    .guide.vertical::before { top: 0; bottom: 0; left: 8px; width: 1px; }
+    .guide.vertical::after { top: 0; left: 5px; width: 7px; height: 5px; border-radius: 1px; }
+    .guide.horizontal { height: 17px; left: -12px; right: -12px; transform: translateY(-50%); cursor: ns-resize; }
+    .guide.horizontal::before { left: 0; right: 0; top: 8px; height: 1px; }
+    .guide.horizontal::after { left: 0; top: 5px; height: 7px; width: 5px; border-radius: 1px; }
+    .guide:hover::before, .guide:focus-visible::before, .guide.dragging::before { outline: 1px solid currentColor; }
+    .guide:focus-visible { outline-offset: 0; }
+    .tile { position: absolute; overflow: hidden; }
+    .tile img { position: absolute; max-width: none; pointer-events: none; }
+    .empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 18px; color: var(--muted); text-align: center; line-height: 20px; }
+    .empty svg { opacity: .65; }
+    .empty p { margin: 0; max-width: 370px; }
+    .preview-size { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 32px; }
+    .preview-size label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+    .preview-size input { width: 80px; min-width: 0; }
+    .section-heading h2 { margin: 0; font-size: 12px; line-height: 20px; font-weight: 500; }
+    .section-heading .plain { min-height: 24px; padding-top: 2px; padding-bottom: 2px; }
+    .inset-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
+    .inset-fields label { display: flex; flex-direction: column; gap: 8px; color: var(--muted); }
+    .input-wrap { position: relative; }
+    .input-wrap::after { content: "px"; position: absolute; top: 9px; right: 10px; color: var(--muted); pointer-events: none; }
+    input { width: 100%; height: 34px; padding: 7px 30px 7px 10px; border: 1px solid var(--control); background: var(--bg); font-variant-numeric: tabular-nums; text-align: right; appearance: textfield; }
+    input::-webkit-inner-spin-button, input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+    input:disabled { color: var(--muted); background: var(--well); }
+    input[aria-invalid="true"] { border-color: var(--danger); }
+    .field-error { margin: 10px 0 0; min-height: 16px; color: var(--danger); line-height: 18px; }
+    .rule-summary { margin: 0; color: var(--muted); line-height: 20px; }
+    .footer { align-items: flex-start; padding-top: 16px; border-top: 1px solid var(--border); }
+    .status { flex: 1; margin: 0; min-height: 34px; display: flex; align-items: center; color: var(--muted); line-height: 18px; overflow-wrap: anywhere; }
+    .status.error { color: var(--danger); }
+    .primary { flex: none; min-width: 154px; border-color: var(--ink); background: var(--ink); color: var(--inverse); font-weight: 500; }
+    .primary:hover:not(:disabled) { background: var(--ink); opacity: .86; }
+    @media(max-width: 460px) {
+      .app { padding: 16px; gap: 16px; }
+      .well { height: 254px; }
+      .inset-fields { gap: 8px; }
+      .input-wrap::after { right: 7px; }
+      input { padding-left: 6px; padding-right: 24px; }
+      .footer { flex-direction: column; }
+      .primary { width: 100%; min-height: 40px; }
+      .status { min-height: 18px; }
+      .preview-size input { width: 68px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="17" height="17" rx="1" stroke="currentColor"/><path d="M6.5 2v16M13.5 2v16M2 6.5h16M2 13.5h16" stroke="currentColor"/></svg>
+        <h1>矢量九宫格</h1>
+      </div>
+      <button id="refresh" class="plain refresh" type="button"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 6A5.2 5.2 0 1 0 13 10M13 2.5V6H9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>重新读取</button>
+    </header>
+
+    <section class="editor" aria-label="九宫格裁切编辑器">
+      <div class="source"><span id="sourceName" class="source-name">未选择原稿</span><span id="sourceSize" class="source-size">— × —</span></div>
+      <div class="preview-toolbar">
+        <div class="tabs" role="tablist" aria-label="预览模式">
+          <button id="cutTab" type="button" class="tab" role="tab" aria-selected="true" aria-controls="previewWell">切分</button>
+          <button id="stretchTab" type="button" class="tab" role="tab" aria-selected="false" aria-controls="previewWell" disabled>拉伸预览</button>
+        </div>
+        <span id="zoom" class="zoom"></span>
+      </div>
+      <div id="previewWell" class="well" role="tabpanel" aria-label="原稿切分预览">
+        <div id="cutStage" class="stage" hidden>
+          <img id="sourceImage" alt="当前选中原稿">
+          <div class="source-boundary"></div>
+          <button type="button" class="guide vertical" data-side="left" role="slider" aria-label="左侧切线" aria-orientation="horizontal"></button>
+          <button type="button" class="guide vertical" data-side="right" role="slider" aria-label="右侧切线" aria-orientation="horizontal"></button>
+          <button type="button" class="guide horizontal" data-side="top" role="slider" aria-label="上侧切线" aria-orientation="vertical"></button>
+          <button type="button" class="guide horizontal" data-side="bottom" role="slider" aria-label="下侧切线" aria-orientation="vertical"></button>
+        </div>
+        <div id="stretchStage" class="stage" hidden></div>
+        <div id="empty" class="empty">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M7 18V7h11M30 7h11v11M41 30v11H30M18 41H7V30M17 17h14v14H17z" stroke="currentColor" stroke-width="1.2"/></svg>
+          <p id="emptyText">在 Figma 画布中选择一个矢量、Frame 或编组</p>
+        </div>
+      </div>
+      <div id="previewSize" class="preview-size" hidden>
+        <label for="targetWidth">宽<input id="targetWidth" type="number" step="0.01" min="0.03" aria-label="拉伸预览宽度"></label>
+        <span aria-hidden="true">×</span>
+        <label for="targetHeight">高<input id="targetHeight" type="number" step="0.01" min="0.03" aria-label="拉伸预览高度"></label>
+      </div>
+    </section>
+
+    <section aria-label="固定边距">
+      <div class="section-heading"><h2>固定边距</h2><button id="reset" class="plain" type="button" disabled>恢复均分</button></div>
+      <div class="inset-fields">
+        <label for="top">上<div class="input-wrap"><input id="top" data-inset="top" type="number" min="0.01" step="0.01" disabled></div></label>
+        <label for="right">右<div class="input-wrap"><input id="right" data-inset="right" type="number" min="0.01" step="0.01" disabled></div></label>
+        <label for="bottom">下<div class="input-wrap"><input id="bottom" data-inset="bottom" type="number" min="0.01" step="0.01" disabled></div></label>
+        <label for="left">左<div class="input-wrap"><input id="left" data-inset="left" type="number" min="0.01" step="0.01" disabled></div></label>
+      </div>
+      <p id="fieldError" class="field-error" role="status" hidden></p>
+    </section>
+
+    <p class="rule-summary">四角固定 · 四边单向拉伸 · 中心双向拉伸</p>
+
+    <footer class="footer">
+      <p id="status" class="status" role="status" aria-live="polite">生成后保留原稿，放在原稿旁边</p>
+      <button id="create" type="button" class="primary" disabled>生成 9 个 Frame</button>
+    </footer>
+  </main>
+  <script>
+    (() => {
+      "use strict";
+      const $ = id => document.getElementById(id);
+      const sides = ["top", "right", "bottom", "left"];
+      const state = { source: null, insets: null, url: null, ready: false, busy: false, loading: false, mode: "cut", token: 0, drag: null };
+      const minimum = 0.01;
+      const guides = Array.from(document.querySelectorAll(".guide"));
+      const inputs = sides.map(side => $(side));
+      const format = value => Number(value.toFixed(2)).toString();
+      const third = value => Math.max(minimum, Math.floor(value / 3 * 100) / 100);
+      const send = message => parent.postMessage({ pluginMessage: message }, "*");
+      const inputNumber = input => input.value.trim() === "" ? NaN : Number(input.value);
+      function setStatus(message, error = false) {
+        $("status").textContent = message || "生成后保留原稿，放在原稿旁边";
+        $("status").classList.toggle("error", error);
+      }
+      function validation(values) {
+        if (!state.source) return "";
+        if (sides.some(side => !Number.isFinite(values[side]) || values[side] < minimum)) return "四边至少保留 0.01 px。";
+        if (values.left + values.right > state.source.width - minimum + 1e-7) return "左右边距之和须小于原稿宽度，中心至少保留 0.01 px。";
+        if (values.top + values.bottom > state.source.height - minimum + 1e-7) return "上下边距之和须小于原稿高度，中心至少保留 0.01 px。";
+        return "";
+      }
+      function readFields() { return Object.fromEntries(sides.map(side => [side, inputNumber($(side))])); }
+      function updateControls() {
+        const disabled = !state.ready || state.busy || state.loading;
+        inputs.forEach(input => { input.disabled = disabled; });
+        guides.forEach(guide => { guide.disabled = disabled; });
+        $("reset").disabled = disabled;
+        $("stretchTab").disabled = disabled;
+        $("refresh").disabled = state.busy;
+        $("cutTab").disabled = state.busy;
+        $("targetWidth").disabled = disabled;
+        $("targetHeight").disabled = disabled;
+        $("create").disabled = disabled || !!validation(readFields());
+        $("create").textContent = state.busy ? "正在生成…" : "生成 9 个 Frame";
+        $("previewWell").setAttribute("aria-busy", String(state.loading || state.busy));
+      }
+      function showFieldError(message) {
+        $("fieldError").hidden = !message;
+        $("fieldError").textContent = message;
+        inputs.forEach(input => input.setAttribute("aria-invalid", String(!!message)));
+      }
+      function writeFields() {
+        sides.forEach(side => { $(side).value = format(state.insets[side]); });
+        showFieldError("");
+        updateControls();
+      }
+      function fit(width, height) {
+        const well = $("previewWell");
+        const scale = Math.min((well.clientWidth - 64) / width, (well.clientHeight - 56) / height, 8);
+        return { scale, width: width * scale, height: height * scale, x: (well.clientWidth - width * scale) / 2, y: (well.clientHeight - height * scale) / 2 };
+      }
+      function place(stage, box) {
+        Object.assign(stage.style, { left: box.x + "px", top: box.y + "px", width: box.width + "px", height: box.height + "px" });
+      }
+      function render() {
+        if (!state.ready || !state.source) return;
+        const source = state.source;
+        const i = state.insets;
+        const cut = state.mode === "cut";
+        $("cutStage").hidden = !cut;
+        $("stretchStage").hidden = cut;
+        $("previewSize").hidden = cut;
+        $("empty").hidden = true;
+        $("previewWell").setAttribute("aria-label", cut ? "原稿切分预览" : "九宫格拉伸预览");
+        if (cut) {
+          const box = fit(source.width, source.height);
+          place($("cutStage"), box);
+          $("zoom").textContent = Math.round(box.scale * 100) + "%";
+          guides.forEach(guide => {
+            const side = guide.dataset.side;
+            const horizontal = side === "left" || side === "right";
+            const total = horizontal ? source.width : source.height;
+            const coordinate = side === "right" || side === "bottom" ? total - i[side] : i[side];
+            guide.style[horizontal ? "left" : "top"] = coordinate * box.scale + "px";
+            guide.setAttribute("aria-valuemin", "0.01");
+            guide.setAttribute("aria-valuemax", format(total - minimum * 2));
+            guide.setAttribute("aria-valuenow", format(i[side]));
+            guide.setAttribute("aria-valuetext", format(i[side]) + " px");
+            guide.title = ({ top: "上", right: "右", bottom: "下", left: "左" })[side] + "边距 " + format(i[side]) + " px";
+          });
+        } else {
+          const minWidth = i.left + i.right + minimum;
+          const minHeight = i.top + i.bottom + minimum;
+          const width = inputNumber($("targetWidth"));
+          const height = inputNumber($("targetHeight"));
+          $("targetWidth").min = format(minWidth);
+          $("targetHeight").min = format(minHeight);
+          const validWidth = Number.isFinite(width) && width >= minWidth - 1e-7;
+          const validHeight = Number.isFinite(height) && height >= minHeight - 1e-7;
+          $("targetWidth").setAttribute("aria-invalid", String(!validWidth));
+          $("targetHeight").setAttribute("aria-invalid", String(!validHeight));
+          if (!validWidth || !validHeight) {
+            $("stretchStage").hidden = true;
+            $("empty").hidden = false;
+            $("emptyText").textContent = "预览尺寸须大于固定边距之和";
+            $("zoom").textContent = "";
+            return;
+          }
+          const box = fit(width, height);
+          place($("stretchStage"), box);
+          $("zoom").textContent = Math.round(box.scale * 100) + "%";
+          const originalX = [0, i.left, source.width - i.right, source.width];
+          const originalY = [0, i.top, source.height - i.bottom, source.height];
+          const targetX = [0, i.left, width - i.right, width];
+          const targetY = [0, i.top, height - i.bottom, height];
+          const tiles = $("stretchStage").children;
+          for (let row = 0; row < 3; row += 1) {
+            for (let col = 0; col < 3; col += 1) {
+              const tile = tiles[row * 3 + col];
+              const tileWidth = targetX[col + 1] - targetX[col];
+              const tileHeight = targetY[row + 1] - targetY[row];
+              const sx = tileWidth / (originalX[col + 1] - originalX[col]);
+              const sy = tileHeight / (originalY[row + 1] - originalY[row]);
+              Object.assign(tile.style, { left: targetX[col] * box.scale + "px", top: targetY[row] * box.scale + "px", width: tileWidth * box.scale + "px", height: tileHeight * box.scale + "px" });
+              Object.assign(tile.firstElementChild.style, { left: -originalX[col] * sx * box.scale + "px", top: -originalY[row] * sy * box.scale + "px", width: source.width * sx * box.scale + "px", height: source.height * sy * box.scale + "px" });
+            }
+          }
+        }
+      }
+      function switchMode(mode) {
+        state.mode = mode;
+        document.body.dataset.mode = mode;
+        $("cutTab").setAttribute("aria-selected", String(mode === "cut"));
+        $("stretchTab").setAttribute("aria-selected", String(mode === "stretch"));
+        $("cutTab").tabIndex = mode === "cut" ? 0 : -1;
+        $("stretchTab").tabIndex = mode === "stretch" ? 0 : -1;
+        render();
+      }
+      function clearSelection(message) {
+        state.token += 1;
+        state.source = null;
+        state.insets = null;
+        state.ready = false;
+        state.loading = false;
+        state.drag = null;
+        if (state.url) URL.revokeObjectURL(state.url);
+        state.url = null;
+        $("sourceImage").removeAttribute("src");
+        $("sourceName").textContent = "未选择原稿";
+        $("sourceSize").textContent = "— × —";
+        $("zoom").textContent = "";
+        $("cutStage").hidden = true;
+        $("stretchStage").hidden = true;
+        $("previewSize").hidden = true;
+        $("empty").hidden = false;
+        $("emptyText").textContent = message || "在 Figma 画布中选择一个矢量、Frame 或编组";
+        inputs.forEach(input => { input.value = ""; });
+        showFieldError("");
+        updateControls();
+      }
+      function loadSelection(message) {
+        if (!(Number.isFinite(message.width) && message.width >= .03 && Number.isFinite(message.height) && message.height >= .03)) {
+          clearSelection("原稿尺寸太小，宽高至少需要 0.03 px");
+          return;
+        }
+        const token = ++state.token;
+        state.source = { nodeId: message.nodeId, revision: message.revision, name: message.name, width: message.width, height: message.height };
+        state.insets = message.insets || { top: third(message.height), right: third(message.width), bottom: third(message.height), left: third(message.width) };
+        state.ready = false;
+        state.loading = true;
+        state.busy = false;
+        $("sourceName").textContent = message.name;
+        $("sourceName").title = message.name;
+        $("sourceSize").textContent = format(message.width) + " × " + format(message.height) + " px";
+        $("cutStage").hidden = true;
+        $("stretchStage").hidden = true;
+        $("empty").hidden = false;
+        $("emptyText").textContent = "正在读取选区…";
+        $("targetWidth").value = format(message.width * 1.5);
+        $("targetHeight").value = format(message.height * 1.5);
+        writeFields();
+        const oldUrl = state.url;
+        const bytes = message.bytes instanceof Uint8Array ? message.bytes : new Uint8Array(message.bytes);
+        const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+        state.url = url;
+        const image = $("sourceImage");
+        image.onload = () => {
+          if (state.token !== token) return;
+          state.loading = false;
+          state.ready = true;
+          const stage = $("stretchStage");
+          stage.replaceChildren();
+          for (let index = 0; index < 9; index += 1) {
+            const tile = document.createElement("div");
+            tile.className = "tile";
+            const img = document.createElement("img");
+            img.src = url;
+            img.alt = "";
+            tile.appendChild(img);
+            stage.appendChild(tile);
+          }
+          switchMode("cut");
+          updateControls();
+          setStatus(message.warning || "生成后保留原稿，放在原稿旁边");
+        };
+        image.onerror = () => {
+          if (state.token !== token) return;
+          clearSelection("预览读取失败，请点击重新读取");
+          setStatus("预览读取失败", true);
+        };
+        image.src = url;
+        if (oldUrl) URL.revokeObjectURL(oldUrl);
+      }
+      inputs.forEach(input => input.addEventListener("input", () => {
+        const values = readFields();
+        const error = validation(values);
+        showFieldError(error);
+        if (!error) { state.insets = values; render(); }
+        updateControls();
+      }));
+      [$("targetWidth"), $("targetHeight")].forEach(input => input.addEventListener("input", render));
+      $("cutTab").addEventListener("click", () => switchMode("cut"));
+      $("stretchTab").addEventListener("click", () => switchMode("stretch"));
+      [$("cutTab"), $("stretchTab")].forEach(tab => tab.addEventListener("keydown", event => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || !state.ready || state.busy || state.loading) return;
+        event.preventDefault();
+        const mode = event.key === "Home" ? "cut" : event.key === "End" ? "stretch" : state.mode === "cut" ? "stretch" : "cut";
+        switchMode(mode);
+        $(mode === "cut" ? "cutTab" : "stretchTab").focus();
+      }));
+      $("refresh").addEventListener("click", () => {
+        if (state.busy) return;
+        state.loading = true;
+        updateControls();
+        setStatus("正在读取选区…");
+        send({ type: "refresh" });
+      });
+      $("reset").addEventListener("click", () => {
+        if (!state.source) return;
+        state.insets = { top: third(state.source.height), right: third(state.source.width), bottom: third(state.source.height), left: third(state.source.width) };
+        writeFields();
+        render();
+      });
+      $("create").addEventListener("click", () => {
+        if (!state.ready || state.busy || state.loading) return;
+        const insets = readFields();
+        const error = validation(insets);
+        if (error) { showFieldError(error); return; }
+        state.busy = true;
+        updateControls();
+        setStatus("正在创建可编辑 Frame…");
+        send({ type: "create", nodeId: state.source.nodeId, revision: state.source.revision, insets });
+      });
+      function moveGuide(side, coordinate) {
+        const horizontal = side === "left" || side === "right";
+        const total = horizontal ? state.source.width : state.source.height;
+        const opposite = ({ top: "bottom", right: "left", bottom: "top", left: "right" })[side];
+        const value = side === "right" || side === "bottom" ? total - coordinate : coordinate;
+        const upper = Math.floor((total - state.insets[opposite] - minimum) * 100 + 1e-7) / 100;
+        state.insets[side] = Math.max(minimum, Math.min(upper, Math.round(value * 100) / 100));
+        writeFields();
+        render();
+      }
+      guides.forEach(guide => {
+        guide.addEventListener("pointerdown", event => {
+          if (!state.ready || state.busy || state.loading || event.button !== 0) return;
+          event.preventDefault();
+          guide.focus();
+          state.drag = { side: guide.dataset.side, pointerId: event.pointerId };
+          guide.classList.add("dragging");
+          guide.setPointerCapture(event.pointerId);
+        });
+        guide.addEventListener("pointermove", event => {
+          if (!state.drag || state.drag.pointerId !== event.pointerId || !state.source) return;
+          const rect = $("cutStage").getBoundingClientRect();
+          const horizontal = state.drag.side === "left" || state.drag.side === "right";
+          const coordinate = horizontal ? (event.clientX - rect.left) / rect.width * state.source.width : (event.clientY - rect.top) / rect.height * state.source.height;
+          moveGuide(state.drag.side, coordinate);
+        });
+        const stop = () => { state.drag = null; guide.classList.remove("dragging"); };
+        guide.addEventListener("pointerup", stop);
+        guide.addEventListener("pointercancel", stop);
+        guide.addEventListener("lostpointercapture", stop);
+        guide.addEventListener("keydown", event => {
+          if (!state.ready || state.busy || state.loading) return;
+          const side = guide.dataset.side;
+          const horizontal = side === "left" || side === "right";
+          const down = horizontal ? event.key === "ArrowRight" : event.key === "ArrowDown";
+          const up = horizontal ? event.key === "ArrowLeft" : event.key === "ArrowUp";
+          if (!down && !up) return;
+          event.preventDefault();
+          const total = horizontal ? state.source.width : state.source.height;
+          const position = side === "right" || side === "bottom" ? total - state.insets[side] : state.insets[side];
+          moveGuide(side, position + (down ? 1 : -1) * (event.shiftKey ? 10 : 1));
+        });
+      });
+      window.addEventListener("message", event => {
+        const message = event.data && event.data.pluginMessage;
+        if (!message || typeof message.type !== "string") return;
+        switch (message.type) {
+          case "selection": loadSelection(message); break;
+          case "selection-error":
+            state.busy = false;
+            clearSelection(message.message);
+            setStatus("");
+            break;
+          case "loading":
+            state.loading = true;
+            if (!state.ready) $("emptyText").textContent = "正在读取选区…";
+            updateControls();
+            setStatus("正在读取选区…");
+            break;
+          case "creating":
+            state.busy = true;
+            updateControls();
+            setStatus("正在创建可编辑 Frame…");
+            break;
+          case "created":
+            state.busy = false;
+            state.loading = false;
+            updateControls();
+            setStatus(message.message || "已生成 9 个 Frame，可拖动外层 Frame 调整宽高");
+            break;
+          case "error":
+            state.busy = false;
+            state.loading = false;
+            updateControls();
+            setStatus(message.message || "操作失败，请重试", true);
+            break;
+        }
+      });
+      new ResizeObserver(render).observe($("previewWell"));
+      window.addEventListener("beforeunload", () => { if (state.url) URL.revokeObjectURL(state.url); });
+      send({ type: "ready" });
+    })();
+  </script>
+</body>
+</html>

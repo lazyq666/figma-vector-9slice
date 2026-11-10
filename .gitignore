@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+npm-debug.log*
+*.zip
+.env
+.env.*
+!.env.example
+
+# Local design research and private validation assets.
+/.taste-skill/
+/validation/
